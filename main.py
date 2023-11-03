@@ -5,6 +5,7 @@
 # author: dromzeh
 
 import os
+import time
 
 
 # this script uses a simple xor cipher for decryption
@@ -33,6 +34,7 @@ def decrypt_file(input_path, output_path):
 def main():
     decrypted = 0
     failed = 0
+    start_time = time.time()  # Start the timer
 
     if not os.path.exists("decrypted_bundles"):
         os.makedirs("decrypted_bundles")
@@ -56,8 +58,12 @@ def main():
             print(f"failed to decrypt {file}: {str(e)}")
             failed += 1
 
-    print(f"decrypted {decrypted} bundles; failed to decrypt {failed} bundles")
+    duration = time.time() - start_time  # Calculate the total duration
+    rps = decrypted / duration if duration > 0 else 0  # Calculate the rate per second
 
+    print(f"Decryption completed in {duration:.2f} seconds.")
+    print(f"Rate: {rps:.2f} files per second.")
+    print(f"Decrypted {decrypted} bundles; failed to decrypt {failed} bundles.")
 
 if __name__ == "__main__":
     main()
