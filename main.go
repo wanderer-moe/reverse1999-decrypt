@@ -51,7 +51,7 @@ func (fd *FileDecryptor) decryptFile(inputPath string, outputPath string) {
 	}
 	defer inputFile.Close()
 
-	outputFile, err := os.Create(outputPath)0x6E
+	outputFile, err := os.Create(outputPath)
 	if err != nil {
 		fmt.Printf("Error creating file %s: %v\n", outputPath, err)
 		return
