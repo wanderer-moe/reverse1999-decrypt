@@ -1,119 +1,93 @@
 package main
 
 import (
-	"fmt"
-	"io"
-	"os"
-	"path/filepath"
-	"time"
+    "fmt"
+    "io/ioutil"
+    "os"
+    "path/filepath"
+    "time"
 )
 
 const (
-	decryptionKey     = 0x55
-	verificationKey   = 0x6E
-	chunkSize         = 4096
-	decryptedDirName  = "decrypted_bundles"
-	bundlesPath       = "bundles"
+    decryptionKey     = 0x55
+    verificationKey   = 0x6E
+    decryptedDirName  = "decrypted_bundles"
+    bundlesPath       = "bundles"
 )
 
 type FileDecryptor struct {
-	DecryptedPath string
+    DecryptedPath string
 }
 
 func NewFileDecryptor(bundlesPath string) *FileDecryptor {
-	decryptedPath := filepath.Join(bundlesPath, decryptedDirName)
-	if _, err := os.Stat(decryptedPath); os.IsNotExist(err) {
-		err := os.MkdirAll(decryptedPath, os.ModePerm)
-		if err != nil {
-			panic(err)
-		}
-	}
-	return &FileDecryptor{DecryptedPath: decryptedPath}
-}
-
-func decryptByte(data byte, key byte) byte {
-	return data ^ key
+    decryptedPath := filepath.Join(bundlesPath, decryptedDirName)
+    if _, err := os.Stat(decryptedPath); os.IsNotExist(err) {
+        err := os.MkdirAll(decryptedPath, os.ModePerm)
+        if err != nil {
+            panic(err)
+        }
+    }
+    return &FileDecryptor{DecryptedPath: decryptedPath}
 }
 
 func (fd *FileDecryptor) decryptDataChunk(chunk []byte, key byte) []byte {
-	decryptedChunk := make([]byte, len(chunk))
-	for i, b := range chunk {
-		decryptedChunk[i] = decryptByte(b, key)
-	}
-	return decryptedChunk
+    decryptedChunk := make([]byte, len(chunk))
+    for i, b := range chunk {
+        decryptedChunk[i] = b ^ key
+    }
+    return decryptedChunk
 }
 
-func (fd *FileDecryptor) decryptFile(inputPath string, outputPath string) {
-	inputFile, err := os.Open(inputPath)
-	if err != nil {
-		fmt.Printf("Error opening file %s: %v\n", inputPath, err)
-		return
-	}
-	defer inputFile.Close()
+func (fd *FileDecryptor) decryptFile(inputPath string, outputPath string) error {
+    inputData, err := ioutil.ReadFile(inputPath)
+    if err != nil {
+        return fmt.Errorf("error reading file %s: %v", inputPath, err)
+    }
 
-	outputFile, err := os.Create(outputPath)
-	if err != nil {
-		fmt.Printf("Error creating file %s: %v\n", outputPath, err)
-		return
-	}
-	defer outputFile.Close()
+    key := inputData[0] ^ decryptionKey
+    if key != inputData[1] ^ verificationKey {
+        return fmt.Errorf("invalid key")
+    }
 
-	initialData := make([]byte, 2)
-	_, err = io.ReadFull(inputFile, initialData)
-	if err != nil {
-		fmt.Printf("Error reading initial data from %s: %v\n", inputPath, err)
-		return
-	}
+    decryptedData := fd.decryptDataChunk(inputData[2:], key)
+    err = ioutil.WriteFile(outputPath, decryptedData, 0644)
+    if err != nil {
+        return fmt.Errorf("error writing file %s: %v", outputPath, err)
+    }
 
-	key := initialData[0] ^ decryptionKey
-	if key != initialData[1] ^ verificationKey {
-		fmt.Println("Invalid key")
-		return
-	}
-
-	outputFile.Write(initialData)
-
-	buffer := make([]byte, chunkSize)
-	for {
-		n, err := inputFile.Read(buffer)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			fmt.Printf("Error reading file %s: %v\n", inputPath, err)
-			return
-		}
-		decryptedChunk := fd.decryptDataChunk(buffer[:n], key)
-		outputFile.Write(decryptedChunk)
-	}
+    return nil
 }
 
-func (fd *FileDecryptor) decryptBundles() (duration time.Duration, filesDecrypted int) {
-	startTime := time.Now()
-	filepath.Walk(bundlesPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			fmt.Printf("Error walking through path %s: %v\n", path, err)
-			return err
-		}
-		if info.IsDir() && info.Name() == decryptedDirName {
-			return filepath.SkipDir
-		}
-		if !info.IsDir() && filepath.Ext(path) == ".dat" {
-			outputPath := filepath.Join(fd.DecryptedPath, info.Name())
-			fd.decryptFile(path, outputPath)
-			filesDecrypted++
-			fmt.Printf("Decrypted %s to %s\n", info.Name(), outputPath)
-		}
-		return nil
-	})
-	duration = time.Since(startTime)
-	return
+func (fd *FileDecryptor) decryptBundles() (duration time.Duration, filesDecrypted int, err error) {
+    startTime := time.Now()
+    err = filepath.Walk(bundlesPath, func(path string, info os.FileInfo, err error) error {
+        if err != nil {
+            return fmt.Errorf("error walking through path %s: %v", path, err)
+        }
+        if info.IsDir() && info.Name() == decryptedDirName {
+            return filepath.SkipDir
+        }
+        if !info.IsDir() && filepath.Ext(path) == ".dat" {
+            outputPath := filepath.Join(fd.DecryptedPath, info.Name())
+            err := fd.decryptFile(path, outputPath)
+            if err != nil {
+                return err
+            }
+            filesDecrypted++
+            fmt.Printf("Decrypted %s to %s\n", info.Name(), outputPath)
+        }
+        return nil
+    })
+    duration = time.Since(startTime)
+    return
 }
 
 func main() {
-	decryptor := NewFileDecryptor(bundlesPath)
-	duration, filesDecrypted := decryptor.decryptBundles()
+    decryptor := NewFileDecryptor(bundlesPath)
+    duration, filesDecrypted, err := decryptor.decryptBundles()
+    rps := float64(filesDecrypted) / duration.Seconds()
+    fmt.Printf("Decryption completed in %v. Rate: %.2f files/sec\n", duration, rps)
 
-	rps := float64(filesDecrypted) / duration.Seconds()
-	fmt.Printf("Decryption completed in %v. Rate: %.2f files/sec\n", duration, rps)
+    fmt.Println("Press any key to exit")
+    fmt.Scanln()
 }
