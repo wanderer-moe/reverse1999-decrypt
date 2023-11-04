@@ -10,7 +10,8 @@ import (
 
 const (
 	decryptionKey     = 0x55
-	chunkSize         = 4096 // Process 4KB at a time
+	verificationKey   = 0x6E
+	chunkSize         = 4096
 	decryptedDirName  = "decrypted_bundles"
 	bundlesPath       = "bundles"
 )
@@ -50,7 +51,7 @@ func (fd *FileDecryptor) decryptFile(inputPath string, outputPath string) {
 	}
 	defer inputFile.Close()
 
-	outputFile, err := os.Create(outputPath)
+	outputFile, err := os.Create(outputPath)0x6E
 	if err != nil {
 		fmt.Printf("Error creating file %s: %v\n", outputPath, err)
 		return
@@ -65,7 +66,7 @@ func (fd *FileDecryptor) decryptFile(inputPath string, outputPath string) {
 	}
 
 	key := initialData[0] ^ decryptionKey
-	if key != initialData[1] ^ 0x6E {
+	if key != initialData[1] ^ verificationKey {
 		fmt.Println("Invalid key")
 		return
 	}
