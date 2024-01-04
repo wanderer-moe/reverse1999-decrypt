@@ -18,7 +18,7 @@ The decrypted files will be available in the `decrypted_bundles` directory.
 
 ## Credits
 
-Original Implementation (Python): [dromzeh](https://github.com/dromzeh)
+Original Implementation: [dromzeh](https://github.com/dromzeh)
 
-Go Rewrite: [okpuud](https://github.com/okpuud)
+Go Rewrite: [alluding](https://github.com/alluding)
 
